@@ -455,10 +455,18 @@ def process_message(gid, text, user_id):
             return handle_pending(gid, text, user_id)
 
     # คำสั่ง
-    if text in ["!รายชื่อ", "!list"]:
+    m = re.match(r"^!(?:รายชื่อ|list)(?:\s+(\d+))?$", text)
+    if m:
+        if m.group(1):
+            idx = int(m.group(1)) - 1
+            return format_session_detail(gid, idx)
         return format_list(gid)
 
-    if text in ["!เซสชัน", "!session"]:
+    m = re.match(r"^!(?:เซสชัน|session)(?:\s+(\d+))?$", text)
+    if m:
+        if m.group(1):
+            idx = int(m.group(1)) - 1
+            return format_session_detail(gid, idx)
         return format_sessions_summary(gid)
 
     if text in ["!สถานที่", "!venue"]:
