@@ -434,7 +434,7 @@ def process_message(gid, text, user_id):
         return format_list(gid)
 
     if text in ["!เซสชัน", "!session"]:
-        return format_session(gid)
+        return format_sessions_summary(gid)
 
     if text in ["!สถานที่", "!venue"]:
         return list_venues(gid)
@@ -445,16 +445,22 @@ def process_message(gid, text, user_id):
     if text in ["!เคลียร์", "!clear"]:
         if not is_admin(user_id):
             return "❌ เฉพาะ Admin เท่านั้น"
-        gd["players"] = []
-        return "🗑️ ล้างรายชื่อทั้งหมดแล้ว"
+        sessions = gd.get("sessions", [])
+        if not sessions:
+            return "❌ ยังไม่มีเซสชันให้ล้าง\nพิมพ์ !สร้าง เพื่อสร้างเซสชันใหม่"
+        sessions[-1]["players"] = []
+        return "🗑️ ล้างรายชื่อเซสชันล่าสุดแล้ว"
 
     if text in ["!ยกเลิกเซสชัน", "!cancelsession"]:
         if not is_admin(user_id):
             return "❌ เฉพาะ Admin เท่านั้น"
-        gd["session"] = None
-        gd["players"] = []
+        sessions = gd.get("sessions", [])
+        if not sessions:
+            return "❌ ยังไม่มีเซสชันให้ยกเลิก"
+        idx = len(sessions)
+        sessions.pop()
         gd["pending"] = None
-        return "🗑️ ยกเลิกเซสชันแล้ว"
+        return f"🗑️ ยกเลิกเซสชันหมายเลข {idx} แล้ว"
 
     if text in ["!ช่วยเหลือ", "!help"]:
         return help_message()
