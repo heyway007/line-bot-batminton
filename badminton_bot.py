@@ -171,7 +171,32 @@ def handle_pending(gid, text, user_id):
             return "\n".join(lines)
 
     elif step == "date":
-        data["date"] = text
+        # รองรับหลายรูปแบบวันที่ เช่น 28.05.69, 28-05-2569, 28/05/69, 28/05/2569
+        def _parse_date_token(tok: str):
+            tok = tok.strip()
+            # match DD<sep>MM<sep>YY(YY)
+            m = re.match(r"^(\d{1,2})[\.\-/](\d{1,2})[\.\-/](\d{2,4})$", tok)
+            if not m:
+                return None
+            d = int(m.group(1))
+            mo = int(m.group(2))
+            y_str = m.group(3)
+            if not (1 <= d <= 31 and 1 <= mo <= 12):
+                return None
+            # Interpret 2-digit years as Buddhist Era (BE) e.g., 69 -> 2569
+            if len(y_str) == 2:
+                year = 2500 + int(y_str)
+            else:
+                year = int(y_str)
+            return f"{d:02d}/{mo:02d}/{year}"
+
+        parsed = _parse_date_token(text)
+        if parsed is None:
+            return (
+                "❌ รูปแบบวันที่ไม่ถูกต้อง\n"
+                "รองรับเช่น: 28.05.69, 28-05-69, 28/05/2569, 28.05.2569, 28-05-2569"
+            )
+        data["date"] = parsed
         pending["step"] = "time"
         return f"✅ วันที่: {data['date']}\n\nกรอกเวลา (เช่น 18:00-20:00 หรือ 18-20 หรือ 18.00-20.00)"
 
