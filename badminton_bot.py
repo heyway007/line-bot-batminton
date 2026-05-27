@@ -163,7 +163,7 @@ def handle_pending(gid, text, user_id):
         if text.isdigit() and 1 <= int(text) <= len(venues):
             data["venue"] = venues[int(text) - 1]
             pending["step"] = "date"
-            return f"✅ สถานที่: {data['venue']}\n\nกรอกวันที่ (เช่น 28/05/2568 หรือ พรุ่งนี้)"
+            return f"✅ สถานที่: {data['venue']}\n\nกรอกวันที่ (เช่น 28/05/69, 28/05/2569, 28.05.69, 28-05-2569 หรือ พรุ่งนี้)"
         else:
             lines = ["❌ กรุณาพิมพ์ตัวเลขให้ถูกต้อง\n\nเลือกสถานที่:"]
             for i, v in enumerate(venues, 1):
@@ -194,7 +194,13 @@ def handle_pending(gid, text, user_id):
         if parsed is None:
             return (
                 "❌ รูปแบบวันที่ไม่ถูกต้อง\n"
-                "รองรับเช่น: 28.05.69, 28-05-69, 28/05/2569, 28.05.2569, 28-05-2569"
+                "รองรับตัวอย่างเช่น:\n"
+                "- 28/05/69\n"
+                "- 28.05.69\n"
+                "- 28-05-69\n"
+                "- 28/05/2569\n"
+                "- 28.05.2569\n"
+                "- 28-05-2569\n"
             )
         data["date"] = parsed
         pending["step"] = "time"
