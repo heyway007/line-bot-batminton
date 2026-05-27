@@ -58,7 +58,7 @@ handler = WebhookHandler(CHANNEL_SECRET)
 # }
 group_data = {}
 
-DEFAULT_VENUES = ["สนามกีฬาในร่ม", "สนาม A", "สนาม B"]
+DEFAULT_VENUES = ["สนามแบดบางบอน BB3 ", "สนามแบดบางขุนเทียน คอร์ทเอกชัย 10/1", "สนามแบดบางขุนเทียน CC"]
 
 
 def get_gd(gid):
@@ -100,7 +100,7 @@ def format_session(gid):
         f"📅 วันที่: {s['date']}\n"
         f"⏰ เวลา: {s['time']}\n"
         f"🏸 จำนวนสนาม: {courts_str}\n"
-        f"👥 รับได้: {s['courts'] * 4} คน"
+        f"👥 รับได้: ไม่จำกัด"
     )
 
 
@@ -144,7 +144,36 @@ def handle_pending(gid, text, user_id):
         return f"✅ วันที่: {data['date']}\n\nกรอกเวลา (เช่น 18:00 หรือ 6 โมงเย็น)"
 
     elif step == "time":
-        data["time"] = text
+        # รองรับรูปแบบเวลา: 17, 17.00, 17:00 และช่วงเวลาเช่น 17-20 หรือ 17:00-19:30
+        def _norm_time_token(tok: str):
+            tok = tok.strip()
+            m = re.match(r"^(\d{1,2})(?:[:\.](\d{1,2}))?$", tok)
+            if not m:
+                return None
+            h = int(m.group(1))
+            mm = int(m.group(2)) if m.group(2) else 0
+            if not (0 <= h <= 23 and 0 <= mm <= 59):
+                return None
+            return f"{h:02d}:{mm:02d}"
+
+        parts = re.split(r"\s*[-–]\s*", text)
+        if len(parts) == 1:
+            t = _norm_time_token(parts[0])
+            if not t:
+                return "❌ รูปแบบเวลาไม่ถูกต้อง\nกรุณากรอก เช่น `17`, `17:00`, `17.00` หรือช่วง `17-20`"
+            data["time"] = t
+        elif len(parts) == 2:
+            t1 = _norm_time_token(parts[0])
+            t2 = _norm_time_token(parts[1])
+            if not t1 or not t2:
+                return "❌ รูปแบบช่วงเวลาไม่ถูกต้อง\nตัวอย่างที่ถูกต้อง: `17-20`, `17:00-19:30`, `17.00-20.00`"
+            # ให้เรียงเวลาให้ถูก (เริ่มก่อน-จบหลัง)
+            if t1 > t2:
+                t1, t2 = t2, t1
+            data["time"] = f"{t1} - {t2}"
+        else:
+            return "❌ รูปแบบช่วงเวลาไม่ถูกต้อง\nกรุณาใส่ช่วงเวลาในรูปแบบ `start-end`"
+
         pending["step"] = "courts"
         return f"✅ เวลา: {data['time']}\n\nกรอกจำนวนสนาม (เช่น 2)"
 
@@ -160,11 +189,10 @@ def handle_pending(gid, text, user_id):
             }
             gd["players"] = []
             gd["pending"] = None
-            max_p = data["courts"] * 4
             return (
                 f"✅ สร้างเซสชันสำเร็จ!\n\n"
                 f"{format_session(gid)}\n\n"
-                f"รับสมัคร {max_p} คน\nพิมพ์ +ชื่อ เพื่อลงชื่อได้เลยครับ 🏸"
+                f"รับสมัคร: ไม่จำกัด\nพิมพ์ +ชื่อ เพื่อลงชื่อได้เลยครับ 🏸"
             )
         else:
             return "❌ กรุณากรอกจำนวนสนามเป็นตัวเลข (เช่น 2)"
@@ -176,9 +204,8 @@ def handle_pending(gid, text, user_id):
 
 def get_max(gid):
     gd = get_gd(gid)
-    if gd["session"]:
-        return gd["session"]["courts"] * 4
-    return MAX_PLAYERS
+    # Return None to indicate unlimited per-session capacity
+    return None
 
 
 def get_total(gid):
@@ -223,9 +250,12 @@ def format_list(gid):
                 num += 1
 
     lines.append("─" * 22)
-    lines.append(f"รวม: {total}/{max_p} คน")
-    if total >= max_p:
-        lines.append("⚠️ เต็มแล้ว!")
+    if max_p is None:
+        lines.append(f"รวม: {total} คน")
+    else:
+        lines.append(f"รวม: {total}/{max_p} คน")
+        if total >= max_p:
+            lines.append("⚠️ เต็มแล้ว!")
     return "\n".join(lines)
 
 
@@ -239,7 +269,8 @@ def add_player(gid, name, slots=1):
         if p["name"] == name:
             return f"⚠️ '{name}' ลงชื่อไปแล้ว (ลำดับที่ {get_player_num(gid, name)})"
 
-    if total + slots > max_p:
+    # If max_p is None => unlimited, skip capacity check
+    if max_p is not None and total + slots > max_p:
         remaining = max_p - total
         if remaining <= 0:
             return f"❌ เต็มแล้ว! ({max_p}/{max_p} คน)"
@@ -248,10 +279,16 @@ def add_player(gid, name, slots=1):
     players.append({"name": name, "slots": slots})
     num = get_player_num(gid, name)
     total_new = get_total(gid)
-    if slots == 1:
-        return f"✅ '{name}' ลำดับที่ {num} | รวม {total_new}/{max_p} คน"
+    if max_p is None:
+        if slots == 1:
+            return f"✅ '{name}' ลำดับที่ {num} | รวม {total_new} คน"
+        else:
+            return f"✅ '{name}' ({slots} คน) ลำดับที่ {num}-{num+slots-1} | รวม {total_new} คน"
     else:
-        return f"✅ '{name}' ({slots} คน) ลำดับที่ {num}-{num+slots-1} | รวม {total_new}/{max_p} คน"
+        if slots == 1:
+            return f"✅ '{name}' ลำดับที่ {num} | รวม {total_new}/{max_p} คน"
+        else:
+            return f"✅ '{name}' ({slots} คน) ลำดับที่ {num}-{num+slots-1} | รวม {total_new}/{max_p} คน"
 
 
 def remove_player(gid, name):
@@ -262,6 +299,8 @@ def remove_player(gid, name):
             players.pop(i)
             total = get_total(gid)
             max_p = get_max(gid)
+            if max_p is None:
+                return f"🗑️ ลบ '{name}' ออกแล้ว | รวม {total} คน"
             return f"🗑️ ลบ '{name}' ออกแล้ว | รวม {total}/{max_p} คน"
     return f"❌ ไม่พบชื่อ '{name}' ในรายชื่อ"
 
